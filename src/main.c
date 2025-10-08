@@ -11,6 +11,7 @@
 #define round(x) round(x)
 
 #define MAX_SAMPLES 10
+#define FREQ_BUZZER 440
 
 //only used in interrupt routine
 volatile uint32_t echoTimeStart; // time when echo is received
@@ -21,6 +22,7 @@ uint32_t TimeSinceLastTrigger; // time since last trigger of sonar sensor
 uint32_t usartPrintStartTime; // time since last USART print
 uint32_t medianTimeDiff = 0; // median of last 10 samples
 uint32_t distance = 0; // distance in cm
+char timer0CompareValueA;
 
 //message buffer used to transmit distance over usart
 char message[255] = "";
@@ -63,10 +65,22 @@ void initSonarSensor() {
 
 //initialize regestries for buzzer
 void initBuzzer() {
-    
+    // set PD3 as output for buzzer
+    DDRD |= (1 << DDD3);
+    return;
 }
 
-//pin change interrupt service routine for echo pin (PD4)
+void initTimer0() {
+    TCCR0A = (1 << WGM01); // set CTC mode
+    TCCR0B = (1 << CS02); // set prescaler to 256
+    TIMSK0 |= (1 << TOIE2); // enable timer compare interrupt for match A
+
+    timer0CompareValueA = round(31250 / FREQ_BUZZER) - 1;
+    OCR0A = timer0CompareValueA;
+    return;
+}
+
+//pin change interrupt service routine for echo pin (PD5)
 ISR(PCINT2_vect) {
     //start timing on rising edge
     if (PIND & (1 << PIND5)) {
@@ -79,11 +93,19 @@ ISR(PCINT2_vect) {
         }
     }
 
+//timer0 compare interrupt service routine for buzzer
+ISR(TIMER0_COMPA_vect) {
+    // toggle PD3
+    PORTD ^= (1 << PORTD3);
+}
+
 int main() {
     init();
     USART_Init();
     USART_Transmit_Line("Hello, USART!");
     initSonarSensor();
+    initBuzzer();
+    initTimer0();
 
     // main loop
     for(;;) {
