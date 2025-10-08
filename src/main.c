@@ -103,7 +103,7 @@ void initBuzzer() {
 void initTimer0() {
     TCCR0A = (1 << WGM01); // set CTC mode
     TCCR0B = (1 << CS02); // set prescaler to 256
-    TIMSK0 |= (1 << TOIE2); // enable timer compare interrupt for match A
+    TIMSK0 |= (1 << OCIE0A); // enable timer compare interrupt for match A
 
     timer0CompareValueA = round(31250 / FREQ_BUZZER) - 1;
     OCR0A = timer0CompareValueA;
