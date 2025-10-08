@@ -49,25 +49,30 @@ uint32_t calculateMedian_uint32(uint32_t *samples, uint8_t size) {
     }
 }
 
-//initialize IO pins
-void init_IO() {
-    // initalize trigger pin (PD3) as output
-    DDRD |= (1 << DDD3);
+//initialize regestries for sonar sensor
+void initSonarSensor() {
+    // initalize trigger pin (PD4) as output
+    DDRD |= (1 << DDD4);
 
-    // initialize interrupt on echo pin (PD4)
+    // initialize interrupt on echo pin (PD5)
     sei(); // enable global interrupts
     PCICR |= (1 << PCIE2); // enable pin change interrupt for PORTD
-    PCMSK2 |= (1 << PCINT20); // enable interrupt for PIND4
+    PCMSK2 |= (1 << PCINT21); // enable interrupt for PIND5
     return;
+}
+
+//initialize regestries for buzzer
+void initBuzzer() {
+    
 }
 
 //pin change interrupt service routine for echo pin (PD4)
 ISR(PCINT2_vect) {
     //start timing on rising edge
-    if (PIND & (1 << PIND4)) {
+    if (PIND & (1 << PIND5)) {
             echoTimeStart = micros();
         //replace oldest sample with new sample on falling edge
-        } else if (!(PIND & (1 << PIND4))) {
+        } else if (!(PIND & (1 << PIND5))) {
             timeDiffSamples[sampleIndex] = micros() - echoTimeStart;
             //wrap around last index
             sampleIndex = (sampleIndex + 1) % MAX_SAMPLES;
@@ -78,15 +83,15 @@ int main() {
     init();
     USART_Init();
     USART_Transmit_Line("Hello, USART!");
-    init_IO();
+    initSonarSensor();
 
     // main loop
     for(;;) {
         //trigger trigger pin every 100ms
         if (millis() - TimeSinceLastTrigger > 100) {
-            PORTD |= (1 << PORTD3);
+            PORTD |= (1 << PORTD4);
             _delay_us(10); // 10 microsecond pulse
-            PORTD &= ~(1 << PORTD3);
+            PORTD &= ~(1 << PORTD4);
             TimeSinceLastTrigger = millis();
         }
 
