@@ -2,13 +2,10 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <usart.h>
-#include <Arduino.h>
 #include <math.h> 
 #include <util/delay.h> 
 #include <inttypes.h>
-
-// fuck you ardiono and your stupid macros that redefine existing functions
-#define round(x) round(x)
+#include <avr/interrupt.h>
 
 #define MAX_SAMPLES 10
 #define FREQ_BUZZER 440
@@ -22,10 +19,44 @@ uint32_t TimeSinceLastTrigger; // time since last trigger of sonar sensor
 uint32_t usartPrintStartTime; // time since last USART print
 uint32_t medianTimeDiff = 0; // median of last 10 samples
 uint32_t distance = 0; // distance in cm
+uint32_t microseconds = 0;
 char timer0CompareValueA;
 
 //message buffer used to transmit distance over usart
 char message[255] = "";
+
+
+uint32_t micros() {
+    return (microseconds);
+}
+
+uint32_t millis() {
+    return round(microseconds / 1000);
+}
+
+//pin change interrupt service routine for echo pin (PD5)
+ISR(PCINT2_vect) {
+    //start timing on rising edge
+    if (PIND & (1 << PIND5)) {
+            echoTimeStart = micros();
+        //replace oldest sample with new sample on falling edge
+        } else if (!(PIND & (1 << PIND5))) {
+            timeDiffSamples[sampleIndex] = micros() - echoTimeStart;
+            //wrap around last index
+            sampleIndex = (sampleIndex + 1) % MAX_SAMPLES;
+        }
+    }
+
+//timer0 compare interrupt service routine for buzzer
+ISR(TIMER0_COMPA_vect) {
+    // toggle PD3
+    PORTD ^= (1 << PORTD3);
+}
+
+ISR(TIMER1_COMPA_vect) {
+    // increment microseconds
+    microseconds += 10;
+}
 
 //function to calculate median of given uint32_t array and size
 uint32_t calculateMedian_uint32(uint32_t *samples, uint8_t size) {
@@ -57,7 +88,6 @@ void initSonarSensor() {
     DDRD |= (1 << DDD4);
 
     // initialize interrupt on echo pin (PD5)
-    sei(); // enable global interrupts
     PCICR |= (1 << PCIE2); // enable pin change interrupt for PORTD
     PCMSK2 |= (1 << PCINT21); // enable interrupt for PIND5
     return;
@@ -80,32 +110,21 @@ void initTimer0() {
     return;
 }
 
-//pin change interrupt service routine for echo pin (PD5)
-ISR(PCINT2_vect) {
-    //start timing on rising edge
-    if (PIND & (1 << PIND5)) {
-            echoTimeStart = micros();
-        //replace oldest sample with new sample on falling edge
-        } else if (!(PIND & (1 << PIND5))) {
-            timeDiffSamples[sampleIndex] = micros() - echoTimeStart;
-            //wrap around last index
-            sampleIndex = (sampleIndex + 1) % MAX_SAMPLES;
-        }
-    }
-
-//timer0 compare interrupt service routine for buzzer
-ISR(TIMER0_COMPA_vect) {
-    // toggle PD3
-    PORTD ^= (1 << PORTD3);
+void initTimer1() {
+    TCCR1B = (1 << CS11 | (1 << WGM12)); //prescaler 8, CTC mode
+    TIMSK1 |= (1 << OCIE1A); // enable timer compare interrupt
+    OCR1A = 20;
+    return;
 }
 
 int main() {
-    init();
     USART_Init();
     USART_Transmit_Line("Hello, USART!");
     initSonarSensor();
     initBuzzer();
     initTimer0();
+    initTimer1();
+    sei(); // enable global interrupts
 
     // main loop
     for(;;) {
