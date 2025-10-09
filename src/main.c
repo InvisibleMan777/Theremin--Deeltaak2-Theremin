@@ -8,7 +8,11 @@
 #include <avr/interrupt.h>
 
 #define MAX_SAMPLES 10
-#define FREQ_BUZZER 440
+#define MAX_DISTANCE_10MM 650 // maximum distance measurable by the sensor in 10mm
+#define MIN_DISTANCE_10MM 20 // minimum distance measurable by the sensor in 10mm
+#define MAX_FREQ_HZ 1400 // maximum frequency of the buzzer in Hz
+#define MIN_FREQ_HZ 230 // minimum frequency of the buzzer in Hz
+
 
 //only used in interrupt routine
 volatile uint32_t echoTimeStart; // time when echo is received
@@ -20,6 +24,7 @@ uint32_t usartPrintStartTime; // time since last USART print
 uint32_t medianTimeDiff = 0; // median of last 10 samples
 uint32_t distance = 0; // distance in cm
 uint32_t microseconds = 0;
+uint16_t FREQ_BUZZER = 440; //frequency of buzzer in Hz
 char timer0CompareValueA;
 
 //message buffer used to transmit distance over usart
@@ -104,9 +109,6 @@ void initTimer0() {
     TCCR0A = (1 << WGM01); // set CTC mode
     TCCR0B = (1 << CS02); // set prescaler to 256
     TIMSK0 |= (1 << OCIE0A); // enable timer compare interrupt for match A
-
-    timer0CompareValueA = round(31250 / FREQ_BUZZER) - 1;
-    OCR0A = timer0CompareValueA;
     return;
 }
 
@@ -141,10 +143,20 @@ int main() {
 
         distance = round((medianTimeDiff * 0.343) / 2);
 
+        if (distance < MIN_DISTANCE_10MM) {
+            distance = MIN_DISTANCE_10MM;
+        } else if (distance > MAX_DISTANCE_10MM) {
+            distance = MAX_DISTANCE_10MM;
+        }
+
+        FREQ_BUZZER = round(((distance - MIN_DISTANCE_10MM) / (double)(MAX_DISTANCE_10MM - MIN_DISTANCE_10MM)) * (MAX_FREQ_HZ - MIN_FREQ_HZ) + MIN_FREQ_HZ);
+        timer0CompareValueA = round(31250 / FREQ_BUZZER) - 1;
+        OCR0A = timer0CompareValueA;
+
         // print distance every 500ms
         if (millis() - usartPrintStartTime > 100) {
             //load distance into message buffer
-            sprintf(message, "distance: %lu", distance);
+            sprintf(message, "distance: %u", distance);
             //trasmit message buffer and reset timer
             USART_Transmit_Line(message);
             usartPrintStartTime = millis();
