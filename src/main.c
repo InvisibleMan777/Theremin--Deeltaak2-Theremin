@@ -6,6 +6,7 @@
 #include <util/delay.h> 
 #include <inttypes.h>
 #include <avr/interrupt.h>
+#include <stdlib.h>
 
 #define MAX_SAMPLES 10 // number of samples to take for median filtering
 #define MAX_DISTANCE_10MM 650 // maximum distance measurable by the sensor in 10mm
@@ -63,27 +64,48 @@ ISR(TIMER1_COMPA_vect) {
     microseconds += 10;
 }
 
+//compare function for qsort to sort uint32_t array in ascending order based on value
+int compare_uint32(const void *a, const void *b) {
+    //base index
+    uint32_t arg1 = *(const uint32_t *)a;
+    //compare index
+    uint32_t arg2 = *(const uint32_t *)b;
+
+    //if base < compare 
+    if (arg1 < arg2) return -1;
+    //if base > compare
+    if (arg1 > arg2) return 1;
+    //if equal
+    return 0;
+}
+
 //function to calculate median of given uint32_t array and size
 uint32_t calculateMedian_uint32(uint32_t *samples, uint8_t size) {
-    // simple bubble sort to sort the samples
-    for (uint8_t i = 0; i < size - 1; i++) {
-        for (uint8_t j = 0; j < size - i - 1; j++) {
-            if (samples[j] > samples[j + 1]) {
-                uint32_t temp = samples[j];
-                samples[j] = samples[j + 1];
-                samples[j + 1] = temp;
-            }
-        }
-    }
+    // // simple bubble sort to sort the samples
+    // for (uint8_t i = 0; i < size - 1; i++) {
+    //     for (uint8_t j = 0; j < size - i - 1; j++) {
+    //         if (samples[j] > samples[j + 1]) {
+    //             uint32_t temp = samples[j];
+    //             samples[j] = samples[j + 1];
+    //             samples[j + 1] = temp;
+    //         }
+    //     }
+    // }
+
+    //create temporary copy of samples so the original order is not changed
+    uint32_t *temp_samples = samples;
+
+    //use qsort from stdlib to sort the samples
+    qsort(temp_samples, size, sizeof(uint32_t), compare_uint32);
 
     //return the median value
     //check if size is even or odd
     if (size % 2 == 0) {
         // average of two middle values
-        return (samples[size / 2 - 1] + samples[size / 2]) / 2;
+        return (temp_samples[size / 2 - 1] + temp_samples[size / 2]) / 2;
     } else {
         // exact middle value
-        return samples[size / 2];
+        return temp_samples[size / 2];
     }
 }
 
@@ -162,7 +184,7 @@ int main() {
         // print distance every 500ms
         if (millis() - usartPrintStartTime > 100) {
             //load distance into message buffer
-            sprintf(message, "distance: %u", distance);
+            sprintf(message, "distance: %lu", distance);
             //trasmit message buffer and reset timer
             USART_Transmit_Line(message);
             usartPrintStartTime = millis();
