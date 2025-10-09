@@ -81,17 +81,6 @@ int compare_uint32(const void *a, const void *b) {
 
 //function to calculate median of given uint32_t array and size
 uint32_t calculateMedian_uint32(uint32_t *samples, uint8_t size) {
-    // // simple bubble sort to sort the samples
-    // for (uint8_t i = 0; i < size - 1; i++) {
-    //     for (uint8_t j = 0; j < size - i - 1; j++) {
-    //         if (samples[j] > samples[j + 1]) {
-    //             uint32_t temp = samples[j];
-    //             samples[j] = samples[j + 1];
-    //             samples[j + 1] = temp;
-    //         }
-    //     }
-    // }
-
     //create temporary copy of samples so the original order is not changed
     uint32_t *temp_samples = samples;
 
