@@ -166,6 +166,8 @@ int main() {
             DDRD |= (1 << DDD3);
         }
 
+        //mapping distance to frequency linearly ((distance - dmin) / (dmax - dmin)) * (freq_max - freq_min) + freq_min
+        //casting to double to prevent integer division (which would result in 0 for distances < dmax)
         FREQ_BUZZER = round(((distance - MIN_DISTANCE_10MM) / (double)(MAX_DISTANCE_10MM - MIN_DISTANCE_10MM)) * (MAX_FREQ_HZ - MIN_FREQ_HZ) + MIN_FREQ_HZ);
         timer0CompareValueA = round(31250 / FREQ_BUZZER) - 1;
         OCR0A = timer0CompareValueA;
