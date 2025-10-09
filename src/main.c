@@ -129,7 +129,7 @@ int main() {
     // main loop
     for(;;) {
         //trigger trigger pin every 100ms
-        if (millis() - TimeSinceLastTrigger > 100) {
+        if (millis() - TimeSinceLastTrigger > 10) {
             PORTD |= (1 << PORTD4);
             _delay_us(10); // 10 microsecond pulse
             PORTD &= ~(1 << PORTD4);
@@ -142,7 +142,7 @@ int main() {
         distance = round((medianTimeDiff * 0.343) / 2);
 
         // print distance every 500ms
-        if (millis() - usartPrintStartTime > 500) {
+        if (millis() - usartPrintStartTime > 100) {
             //load distance into message buffer
             sprintf(message, "distance: %lu", distance);
             //trasmit message buffer and reset timer
