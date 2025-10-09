@@ -7,7 +7,7 @@
 #include <inttypes.h>
 #include <avr/interrupt.h>
 
-#define MAX_SAMPLES 10
+#define MAX_SAMPLES 10 // number of samples to take for median filtering
 #define MAX_DISTANCE_10MM 650 // maximum distance measurable by the sensor in 10mm
 #define MIN_DISTANCE_10MM 20 // minimum distance measurable by the sensor in 10mm
 #define MAX_FREQ_HZ 1400 // maximum frequency of the buzzer in Hz
@@ -143,12 +143,15 @@ int main() {
 
         distance = round((medianTimeDiff * 0.343) / 2);
 
+        //set distance to MIN if smaller then MIN, buzzer stops buzzing when distance is greater than max
         if (distance < MIN_DISTANCE_10MM) {
             distance = MIN_DISTANCE_10MM;
         } else if (distance > MAX_DISTANCE_10MM) {
+            //switch buzzer to input to stop buzzing
             DDRD &= ~(1 << DDD3);
         }
         else {
+            //set buzzer pin as output to enable buzzing
             DDRD |= (1 << DDD3);
         }
 
