@@ -131,7 +131,7 @@ int main() {
     // main loop
     for(;;) {
         //trigger trigger pin every 100ms
-        if (millis() - TimeSinceLastTrigger > 10) {
+        if (millis() - TimeSinceLastTrigger > 1) {
             PORTD |= (1 << PORTD4);
             _delay_us(10); // 10 microsecond pulse
             PORTD &= ~(1 << PORTD4);
@@ -146,7 +146,10 @@ int main() {
         if (distance < MIN_DISTANCE_10MM) {
             distance = MIN_DISTANCE_10MM;
         } else if (distance > MAX_DISTANCE_10MM) {
-            distance = MAX_DISTANCE_10MM;
+            DDRD &= ~(1 << DDD3);
+        }
+        else {
+            DDRD |= (1 << DDD3);
         }
 
         FREQ_BUZZER = round(((distance - MIN_DISTANCE_10MM) / (double)(MAX_DISTANCE_10MM - MIN_DISTANCE_10MM)) * (MAX_FREQ_HZ - MIN_FREQ_HZ) + MIN_FREQ_HZ);
