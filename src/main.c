@@ -3,7 +3,6 @@
 #include <avr/interrupt.h>
 #include <stdio.h>
 #include <math.h> 
-#include <util/delay.h>
 
 //internal libraries
 #include "usart.h"
@@ -17,21 +16,21 @@
 #define MAX_FREQ_HZ 1400 // maximum frequency of the buzzer in Hz
 #define MIN_FREQ_HZ 230 // minimum frequency of the buzzer in Hz
 
+//states for sonar state machine
+enum SonarState {
+    READY_FOR_TRIGGER,
+    SENDING_TRIGGER,
+    WAITING_FOR_ECHO,
+    ECHO_RECEIVED
+};
+
 //only used in interrupt routine
 volatile uint32_t echoTimeStart; // time when echo is received
-volatile uint8_t sampleIndex = 0; // current index in samples array
+volatile uint8_t sampleIndex = 0; // current index of oldest sample in samples array
 
 //global variables
 uint32_t timeDiffSamples[MAX_SAMPLES] = {0}; // array to hold last MAX samples of distances
-uint32_t TimeSinceLastTrigger; // time since last trigger of sonar sensor
-uint32_t usartPrintStartTime; // time since last USART print
-uint32_t medianTimeDiff = 0; // median of last MAX samples
-uint32_t distance = 0; // distance in cm
-uint16_t FREQ_BUZZER = 440; //frequency of buzzer in Hz
-
-//buffers
-char timer0CompareValueA; //buffer for OCR0A to set buzzer frequency
-char message[255] = ""; //message buffer used to transmit distance over usart
+char echoReceivedFlag = 0; // flag to indicate if echo has been received by the sonar sensor
 
 //pin change interrupt service routine for echo pin of the sonar sensor
 ISR(PCINT2_vect) {
@@ -45,6 +44,8 @@ ISR(PCINT2_vect) {
             timeDiffSamples[sampleIndex] = micros() - echoTimeStart;
             //next oldest sample is one index higher, wrap around at last index using modulo (max+1 % max = 0)
             sampleIndex = (sampleIndex + 1) % MAX_SAMPLES;
+            //set flag to indicate echo has been received
+            echoReceivedFlag = 1;
     }
 }
 
@@ -74,6 +75,16 @@ void initBuzzer() {
 }
 
 int main() {
+    enum SonarState sonarState = READY_FOR_TRIGGER; // current state of sonar state machine
+
+    uint32_t timeSinceTriggerStart; // time since last trigger of sonar sensor
+    uint32_t timeSinceLastUsartPrint; // time since last USART print
+    uint32_t medianTimeDiff = 0; // median of last MAX samples
+    uint32_t distance = 0; // distance in cm
+    uint16_t frequencyBuzzer = 440; //frequency of buzzer in Hz, initialized at 440Hz (A4) but will be updated every cycle based on distance
+    
+    char message[255] = ""; //message buffer used to transmit distance over usart
+
     //initialize usart communication for debugging
     USART_Init();
     USART_Transmit_Line("Hello, USART!");
@@ -87,44 +98,69 @@ int main() {
 
     //main loop
     for(;;) {
-        //trigger sonar every x ms
-        if (millis() - TimeSinceLastTrigger > 1) {
-            //enable trigger pin for 10 microseconds
-            PORTD |= (1 << PORTD4);
-            _delay_us(10);
-            PORTD &= ~(1 << PORTD4);
-            //reset timer
-            TimeSinceLastTrigger = millis();
-        }
+        //state machine for sonar sensor
+        switch (sonarState) {
+            case READY_FOR_TRIGGER:
+                //enable trigger pin
+                PORTD |= (1 << PORTD4);
+                timeSinceTriggerStart = micros();
+                sonarState = SENDING_TRIGGER;
+                break;
 
-        // calculate median of last 10 samples
-        medianTimeDiff = calculateMedian_uint32(timeDiffSamples, MAX_SAMPLES);
+            case SENDING_TRIGGER:
+                //disable trigger pin after 10 microseconds
+                if (micros() - timeSinceTriggerStart > 10) {
+                    PORTD &= ~(1 << PORTD4);
+                    sonarState = WAITING_FOR_ECHO;
+                }
+                break;
 
-        //calculate distance in mm: distance = (timeDiff * speed of sound) / 2
-        distance = round((medianTimeDiff * 0.343) / 2);
+            case WAITING_FOR_ECHO:
+                //check if echo has been received
+                if (echoReceivedFlag) {
+                    //reset flag
+                    echoReceivedFlag = 0;
+                    //move to next state
+                    sonarState = ECHO_RECEIVED;
+                }
+                break;
 
-        //cap distance to MAX_DISTANCE_MM and MIN_DISTANCE_MM
-        if (distance < MIN_DISTANCE_MM) {
-            distance = MIN_DISTANCE_MM;
-        } else if (distance > MAX_DISTANCE_MM) {
-            distance = MAX_DISTANCE_MM;
+            case ECHO_RECEIVED:
+                //calculate median of last 10 samples
+                medianTimeDiff = calculateMedian_uint32(timeDiffSamples, MAX_SAMPLES);
+                //calculate distance in mm: distance = (timeDiff * speed of sound) / 2
+                distance = round((medianTimeDiff * 0.343) / 2);
+
+                //cap distance to MAX_DISTANCE_MM and MIN_DISTANCE_MM
+                if (distance < MIN_DISTANCE_MM) {
+                    distance = MIN_DISTANCE_MM;
+                } else if (distance > MAX_DISTANCE_MM) {
+                    distance = MAX_DISTANCE_MM;
+                }
+
+                //set ready for next trigger
+                sonarState = READY_FOR_TRIGGER;
+                break;
+
+            default:
+                //should never happen
+                break;
         }
 
         //mapping distance to frequency negatively linearly: frequenty = ((dmax - distance + dmin) / (dmax - dmin)) * (fmax - fmin) + fmin
         //casting to double to prevent integer division (which would result in 0 for distances < dmax)
-        FREQ_BUZZER = round(((MAX_DISTANCE_MM - distance + MIN_DISTANCE_MM) / (double)(MAX_DISTANCE_MM - MIN_DISTANCE_MM)) * (MAX_FREQ_HZ - MIN_FREQ_HZ) + MIN_FREQ_HZ);
+        frequencyBuzzer = round(((MAX_DISTANCE_MM - distance + MIN_DISTANCE_MM) / (double) (MAX_DISTANCE_MM - MIN_DISTANCE_MM)) * (MAX_FREQ_HZ - MIN_FREQ_HZ) + MIN_FREQ_HZ);
 
-        //update timer0 compare value for buzzer frequency
-        timer0CompareValueA = round(31250 / FREQ_BUZZER) - 1;
-        OCR0A = timer0CompareValueA;
+        //set frequency of buzzer by setting timer0 compare value, cast to uint8_t to make sure it fits in the register
+        OCR0A = (uint8_t) round(31250 / frequencyBuzzer) - 1;
 
-        // print distance every x ms
-        if (millis() - usartPrintStartTime > 100) {
+        // print distance every x ms (debug)
+        if (millis() - timeSinceLastUsartPrint > 100) {
             //load distance into message buffer
             sprintf(message, "distance: %lu", distance);
             //trasmit message buffer and reset timer
             USART_Transmit_Line(message);
-            usartPrintStartTime = millis();
+            timeSinceLastUsartPrint = millis();
         }
     }
 
