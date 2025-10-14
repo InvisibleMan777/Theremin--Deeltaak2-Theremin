@@ -3,10 +3,11 @@
 #include <stdio.h>
 #include <usart.h>
 #include <math.h> 
-#include <util/delay.h> 
 #include <inttypes.h>
 #include <avr/interrupt.h>
 #include <stdlib.h>
+#include <string.h>
+#include <util/delay.h>
 
 #define MAX_SAMPLES 10 // number of samples to take for median filtering
 #define MAX_DISTANCE_10MM 650 // maximum distance measurable by the sensor in 10mm
@@ -82,7 +83,8 @@ int compare_uint32(const void *a, const void *b) {
 //function to calculate median of given uint32_t array and size
 uint32_t calculateMedian_uint32(uint32_t *samples, uint8_t size) {
     //create temporary copy of samples so the original order is not changed
-    uint32_t *temp_samples = samples;
+    uint32_t temp_samples[MAX_SAMPLES];
+    memcpy(temp_samples, samples, sizeof(temp_samples));
 
     //use qsort from stdlib to sort the samples
     qsort(temp_samples, size, sizeof(uint32_t), compare_uint32);
@@ -158,17 +160,14 @@ int main() {
         if (distance < MIN_DISTANCE_10MM) {
             distance = MIN_DISTANCE_10MM;
         } else if (distance > MAX_DISTANCE_10MM) {
-            //switch buzzer to input to stop buzzing
-            DDRD &= ~(1 << DDD3);
-        }
-        else {
-            //set buzzer pin as output to enable buzzing
-            DDRD |= (1 << DDD3);
+            distance = MAX_DISTANCE_10MM;
         }
 
-        //mapping distance to frequency linearly ((distance - dmin) / (dmax - dmin)) * (freq_max - freq_min) + freq_min
+        //mapping distance to frequency linearly: frequenty = ((dmax - distance + dmin) / (dmax - dmin)) * (fmax - fmin) + fmin
         //casting to double to prevent integer division (which would result in 0 for distances < dmax)
-        FREQ_BUZZER = round(((distance - MIN_DISTANCE_10MM) / (double)(MAX_DISTANCE_10MM - MIN_DISTANCE_10MM)) * (MAX_FREQ_HZ - MIN_FREQ_HZ) + MIN_FREQ_HZ);
+        FREQ_BUZZER = round(((MAX_DISTANCE_10MM - distance + MIN_DISTANCE_10MM) / (double)(MAX_DISTANCE_10MM - MIN_DISTANCE_10MM)) * (MAX_FREQ_HZ - MIN_FREQ_HZ) + MIN_FREQ_HZ);
+
+        //update timer0 compare value for buzzer frequency
         timer0CompareValueA = round(31250 / FREQ_BUZZER) - 1;
         OCR0A = timer0CompareValueA;
 
