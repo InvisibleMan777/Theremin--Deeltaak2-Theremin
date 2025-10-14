@@ -34,18 +34,28 @@ char echoReceivedFlag = 0; // flag to indicate if echo has been received by the 
 
 //pin change interrupt service routine for echo pin of the sonar sensor
 ISR(PCINT2_vect) {
-    //start timing on rising edge
-    if (PIND & (1 << PIND5)) {
+    //interupt is triggered on both rising and falling edge of echo pin 
+    switch (PIND & (1 << PIND5)) {
+        //rising edge
+        case (1 << PIND5):
+            //start timing
             echoTimeStart = micros();
-
-    //stop timing on falling edge, save time difference in samples array
-    } else if (!(PIND & (1 << PIND5))) {
+            break;
+            
+        //falling edge
+        case 0:
+            //save time difference in samples array
             //replace oldest sample with new sample
             timeDiffSamples[sampleIndex] = micros() - echoTimeStart;
             //next oldest sample is one index higher, wrap around at last index using modulo (max+1 % max = 0)
             sampleIndex = (sampleIndex + 1) % MAX_SAMPLES;
             //set flag to indicate echo has been received
             echoReceivedFlag = 1;
+            break;
+
+        default:
+            //should never happen
+            break;
     }
 }
 
