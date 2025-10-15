@@ -87,8 +87,8 @@ void initBuzzer() {
 int main() {
     enum SonarState sonarState = READY_FOR_TRIGGER; // current state of sonar state machine
 
-    uint32_t timeSinceTriggerStart; // time since last trigger of sonar sensor
-    uint32_t timeSinceLastUsartPrint; // time since last USART print
+    uint32_t timeSinceTriggerStart = 0; // time since last trigger of sonar sensor
+    uint32_t timeSinceLastUsartPrint = 0; // time since last USART print
     uint32_t medianTimeDiff = 0; // median of last MAX samples
     uint32_t distance = 0; // distance in cm
     uint16_t frequencyBuzzer = 440; //frequency of buzzer in Hz, initialized at 440Hz (A4) but will be updated every cycle based on distance
