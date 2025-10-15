@@ -61,7 +61,7 @@ ISR(PCINT2_vect) {
 
 //timer0 compare interrupt service routine for buzzer
 ISR(TIMER0_COMPA_vect) {
-    //toggle PD3
+    //toggle PD3 (buzzer) by toggling its data direction
     DDRD ^= (1 << DDD3);
 }
 
@@ -80,11 +80,18 @@ static void initBuzzer() {
     TCCR0A = (1 << WGM01); // set CTC mode
     TCCR0B = (1 << CS02); // set prescaler to 256
     TIMSK0 = (1 << OCIE0A); // enable timer compare interrupt for match A
+    OCR0A = 77; // this register now controls the frequency of the buzzer, initialized at 400Hz (16MHz / (2 * 256 * 400Hz) - 1 = 77)
 
     //init timer2, used for volume control and output of buzzer
-    TCCR2A = (1 << COM2B1 | 1 << WGM21 | 1 << WGM20); // set fast PWM mode, clear OC2B on compare match, set at BOTTOM
+    TCCR2A = (1 << COM2B1 | 1 << WGM21 | 1 << WGM20); // set fast PWM mode, clear OC2B (connected to buzzer) on compare match, set at BOTTOM
     TCCR2B = (1 << CS20); // set prescaler to 1 (no prescaling)
-    OCR2B = 255; // set volume to max (duty cycle 100%)
+    OCR2B = 25; // this register now controls the volume of the buzzer, initialized at ~10% duty cycle (25/255)
+}
+
+static void initVolumeControl() {
+    //init ADC, used for volume control
+    ADMUX = (1 << ADLAR | 1 << REFS0); // set reference voltage to AVcc and select ADC0 (connected to potmeter) as input
+    ADCSRA = (1 << ADEN | 1 << ADATE | 1 << ADSC |1 << ADPS2 | 1 << ADPS1 | 1 << ADPS0); // enable ADC, enable auto trigger, start initial conversion, and set prescaler to 128
 }
 
 int main() {
@@ -102,11 +109,11 @@ int main() {
     USART_Transmit_Line("Hello, USART!");
     //initialize time tracking so we can use millis() and micros()
     timerTrackingInit();
-    //initialize sonar sensor and buzzer
+    //initialize sensors and actuators
+    initVolumeControl();
     initSonarSensor();
     initBuzzer();
     //enable global interrupts
-
     sei(); 
 
     //main loop
@@ -167,10 +174,14 @@ int main() {
         //set frequency of buzzer by setting timer0 compare value, cast to uint8_t to make sure it fits in the register
         OCR0A = (uint8_t) round(31250 / frequencyBuzzer) - 1;
 
+        //set volume of buzzer by setting timer2 compare value based on ADC value (potmeter), both values are between 0 and 255 so direct mapping is possible
+        //NOTE: ADCH is used so we leave out the 2 least significant bits of the ADC register, which are garbage due to noise
+        OCR2B = ADCH;
+
         // print distance every x ms (debug)
         if (millis() - timeSinceLastUsartPrint > 100) {
             //load distance into message buffer, cast to unsigned long to prevent warning from cppcheck
-            sprintf(message, "distance: %lu | frequency: %u", (unsigned long) distance, frequencyBuzzer);
+            sprintf(message, "distance: %lu | frequency: %u | adc: %u", (unsigned long) distance, frequencyBuzzer, ADCH);
             //trasmit message buffer and reset timer
             USART_Transmit_Line(message);
             timeSinceLastUsartPrint = millis();
