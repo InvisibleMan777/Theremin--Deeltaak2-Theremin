@@ -88,6 +88,7 @@ static void initBuzzer() {
     OCR2B = 25; // this register now controls the volume of the buzzer, initialized at ~10% duty cycle (25/255)
 }
 
+//initialize regestries for volume control (ADC)
 static void initVolumeControl() {
     //init ADC, used for volume control
     ADMUX = (1 << ADLAR | 1 << REFS0); // set reference voltage to AVcc and select ADC0 (connected to potmeter) as input
@@ -99,8 +100,7 @@ int main() {
 
     uint32_t timeSinceTriggerStart = 0; // time since last trigger of sonar sensor
     uint32_t timeSinceLastUsartPrint = 0; // time since last USART print
-    uint32_t medianTimeDiff = 0; // median of last MAX samples
-    uint32_t distance = 0; // distance in cm
+    uint32_t distance = 0; // distance based on sonarsensor input in mm
     
     char message[255] = ""; //message buffer used to transmit distance over usart
 
@@ -147,7 +147,7 @@ int main() {
 
             case ECHO_RECEIVED:
                 //calculate median of last 10 samples
-                medianTimeDiff = calculateMedian_uint32(timeDiffSamples, MAX_SAMPLES);
+                uint32_t medianTimeDiff = calculateMedian_uint32(timeDiffSamples, MAX_SAMPLES);
                 //calculate distance in mm: distance = (timeDiff * speed of sound) / 2
                 distance = round((medianTimeDiff * 0.343) / 2);
 
