@@ -5,7 +5,7 @@
 #include "medianCalculator.h"
 
 //compare function for qsort to sort uint32_t array in ascending order based on value
-int compare_uint32(const void *a, const void *b) {
+static int compare_uint32(const void *a, const void *b) {
     //base index
     uint32_t arg1 = *(const uint32_t *)a;
     //compare index
@@ -20,7 +20,7 @@ int compare_uint32(const void *a, const void *b) {
 }
 
 //function to calculate median of given uint32_t array and size
-uint32_t calculateMedian_uint32(uint32_t *samples, uint8_t size) {
+uint32_t calculateMedian_uint32(const uint32_t *samples, uint8_t size) {
     //Handle empty array case
     if (size == 0) {
         return 0;

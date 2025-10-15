@@ -9,7 +9,7 @@ extern "C" {
 void USART_Init();
 void USART_Init_RXinterrupt();
 void USART_Transmit_Char(uint8_t b);
-void USART_Transmit_Line(char* str);
+void USART_Transmit_Line(const char* str);
 uint8_t USART_Receive(void);
 
 #ifdef __cplusplus

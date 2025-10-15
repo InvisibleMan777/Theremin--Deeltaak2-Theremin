@@ -40,7 +40,7 @@ uint8_t USART_Receive(void) {
 	return(UDR0);
 }
 
-void USART_Transmit_Line(char* str) {
+void USART_Transmit_Line(const char* str) {
     // Transmit every character in the string until the nullterminator (equal to false) is reached
     while (*str) {
         USART_Transmit_Char(*str++);
