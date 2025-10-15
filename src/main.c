@@ -62,7 +62,7 @@ ISR(PCINT2_vect) {
 //timer0 compare interrupt service routine for buzzer
 ISR(TIMER0_COMPA_vect) {
     //toggle PD3
-    PORTD ^= (1 << PORTD3);
+    DDRD ^= (1 << DDD3);
 }
 
 //initialize regestries for sonar sensor
@@ -76,12 +76,15 @@ static void initSonarSensor() {
 
 //initialize regestries for buzzer
 static void initBuzzer() {
-    DDRD |= (1 << DDD3); // set PD3 (connected to buzzer) as output
-
-    //init timer0
+    //init timer0, used to create frequency for buzzer
     TCCR0A = (1 << WGM01); // set CTC mode
     TCCR0B = (1 << CS02); // set prescaler to 256
-    TIMSK0 |= (1 << OCIE0A); // enable timer compare interrupt for match A
+    TIMSK0 = (1 << OCIE0A); // enable timer compare interrupt for match A
+
+    //init timer2, used for volume control and output of buzzer
+    TCCR2A = (1 << COM2B1 | 1 << WGM21 | 1 << WGM20); // set fast PWM mode, clear OC2B on compare match, set at BOTTOM
+    TCCR2B = (1 << CS20); // set prescaler to 1 (no prescaling)
+    OCR2B = 255; // set volume to max (duty cycle 100%)
 }
 
 int main() {
@@ -103,6 +106,7 @@ int main() {
     initSonarSensor();
     initBuzzer();
     //enable global interrupts
+
     sei(); 
 
     //main loop
@@ -165,7 +169,7 @@ int main() {
 
         // print distance every x ms (debug)
         if (millis() - timeSinceLastUsartPrint > 100) {
-            //load distance into message buffer, cast to unsigned long to prevent warning from cpcheck
+            //load distance into message buffer, cast to unsigned long to prevent warning from cppcheck
             sprintf(message, "distance: %lu | frequency: %u", (unsigned long) distance, frequencyBuzzer);
             //trasmit message buffer and reset timer
             USART_Transmit_Line(message);
