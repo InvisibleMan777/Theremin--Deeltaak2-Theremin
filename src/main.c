@@ -11,7 +11,7 @@
 
 //constants
 #define MAX_SAMPLES 10 // number of samples to take for median filtering
-#define MAX_DISTANCE_MM 650 // maximum distance measurable b00...........y the sensor in mm
+#define MAX_DISTANCE_MM 650 // maximum distance measurable by the sensor in mm
 #define MIN_DISTANCE_MM 20 // minimum distance measurable by the sensor in mm
 #define MAX_FREQ_HZ 1400 // maximum frequency of the buzzer in Hz
 #define MIN_FREQ_HZ 230 // minimum frequency of the buzzer in Hz
@@ -156,9 +156,9 @@ int main() {
                 break;
         }
 
-        //mapping distance to frequency negatively linearly: frequenty = ((dmax - distance + dmin) / (dmax - dmin)) * (fmax - fmin) + fmin
+        //mapping distance to frequency negatively linearly: frequenty = ((dmax - distance) / (dmax - dmin)) * (fmax - fmin) + fmin
         //casting to double to prevent integer division (which would result in 0 for distances < dmax)
-        uint16_t frequencyBuzzer = round(((MAX_DISTANCE_MM - distance + MIN_DISTANCE_MM) / (double) (MAX_DISTANCE_MM - MIN_DISTANCE_MM)) * (MAX_FREQ_HZ - MIN_FREQ_HZ) + MIN_FREQ_HZ);
+        uint16_t frequencyBuzzer = round(((MAX_DISTANCE_MM - distance) / (double) (MAX_DISTANCE_MM - MIN_DISTANCE_MM)) * (MAX_FREQ_HZ - MIN_FREQ_HZ) + MIN_FREQ_HZ);
 
         //set frequency of buzzer by setting timer0 compare value, cast to uint8_t to make sure it fits in the register
         OCR0A = (uint8_t) round(31250 / frequencyBuzzer) - 1;
@@ -166,7 +166,7 @@ int main() {
         // print distance every x ms (debug)
         if (millis() - timeSinceLastUsartPrint > 100) {
             //load distance into message buffer, cast to unsigned long to prevent warning from cpcheck
-            sprintf(message, "distance: %lu", (unsigned long) distance);
+            sprintf(message, "distance: %lu | frequency: %u", (unsigned long) distance, frequencyBuzzer);
             //trasmit message buffer and reset timer
             USART_Transmit_Line(message);
             timeSinceLastUsartPrint = millis();
