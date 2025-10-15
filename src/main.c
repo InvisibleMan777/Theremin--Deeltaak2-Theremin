@@ -101,6 +101,7 @@ int main() {
     uint32_t timeSinceTriggerStart = 0; // time since last trigger of sonar sensor
     uint32_t timeSinceLastUsartPrint = 0; // time since last USART print
     uint32_t distance = 0; // distance based on sonarsensor input in mm
+    uint32_t medianTimeDiff = 0; // median of last MAX_SAMPLES time differences in microseconds
     
     char message[255] = ""; //message buffer used to transmit distance over usart
 
@@ -147,7 +148,7 @@ int main() {
 
             case ECHO_RECEIVED:
                 //calculate median of last 10 samples
-                uint32_t medianTimeDiff = calculateMedian_uint32(timeDiffSamples, MAX_SAMPLES);
+                medianTimeDiff = calculateMedian_uint32(timeDiffSamples, MAX_SAMPLES);
                 //calculate distance in mm: distance = (timeDiff * speed of sound) / 2
                 distance = round((medianTimeDiff * 0.343) / 2);
 
