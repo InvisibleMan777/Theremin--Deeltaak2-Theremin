@@ -21,6 +21,11 @@ int compare_uint32(const void *a, const void *b) {
 
 //function to calculate median of given uint32_t array and size
 uint32_t calculateMedian_uint32(uint32_t *samples, uint8_t size) {
+    //Handle empty array case
+    if (size == 0) {
+        return 0;
+    }
+    
     //create temporary copy of samples so the original order is not changed
     uint32_t temp_samples[size];
     memcpy(temp_samples, samples, sizeof(temp_samples));
