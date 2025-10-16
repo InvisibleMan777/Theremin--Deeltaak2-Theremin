@@ -11,7 +11,8 @@
 #include "queueType.h"
 
 //constants
-#define MAX_SAMPLES 10 // number of samples to take for median filtering
+#define MAX_SAMPLES 15 // number of samples to take for median filtering
+#define MIN_SAMPLES 1 // minimum number of samples for median filtering
 #define MAX_DISTANCE_MM 650 // maximum distance measurable by the sensor in mm
 #define MIN_DISTANCE_MM 20 // minimum distance measurable by the sensor in mm
 #define MAX_FREQ_HZ 1400 // maximum frequency of the buzzer in Hz
@@ -33,13 +34,14 @@ volatile uint8_t sampleIndex = 0; // current index of oldest sample in samples a
 Queue_uint32 *timeDiffSamples; //last sample of time differences in microseconds
 char echoReceivedFlag = 0; // flag to indicate if echo has been received by the sonar sensor
 uint32_t latestMeasurement = 0; //latest measurement from sonar sensor
+uint8_t filterSize = MAX_SAMPLES;
 
 //pin change interrupt service routine for echo pin of the sonar sensor
-ISR(PCINT2_vect) {
-    //interupt is triggered on both rising and falling edge of echo pin 
-    switch (PIND & (1 << PIND5)) {
+ISR(PCINT1_vect) {
+    //interupt is triggered on both rising and falling edge of echo pin
+    switch (PINC & (1 << PINC2)) {
         //rising edge
-        case (1 << PIND5):
+        case (1 << PINC2):
             //start timing
             echoTimeStart = micros();
             break;
@@ -58,6 +60,18 @@ ISR(PCINT2_vect) {
     }
 }
 
+ISR(PCINT0_vect) {
+    //button0 on falling edge
+    if (!(PINB & (1 << PINB0)) && filterSize < MAX_SAMPLES) {
+        filterSize += 2;
+    }
+    //button1 on falling edge
+    if (!(PINB & (1 << PINB1)) && filterSize > MIN_SAMPLES) {
+        //button on PINB1 was pressed, increase filter size
+        filterSize -= 2;
+    }
+}
+
 //timer0 compare interrupt service routine for buzzer
 ISR(TIMER0_COMPA_vect) {
     //toggle PD3 (buzzer) by toggling its data direction
@@ -66,11 +80,11 @@ ISR(TIMER0_COMPA_vect) {
 
 //initialize regestries for sonar sensor
 static void initSonarSensor() {
-    DDRD |= (1 << DDD4); //initalize trigger pin (PD4) as output
+    DDRC |= (1 << DDC1); //initalize trigger pin (PC1) as output
 
     //enable interrupt
-    PCICR |= (1 << PCIE2); // enable pin change interrupt for PORTD
-    PCMSK2 |= (1 << PCINT21); // enable interrupt for PIND5
+    PCICR |= (1 << PCIE1); // enable pin change interrupt for PORTC
+    PCMSK1 |= (1 << PCINT10); // enable interrupt for PC2
 }
 
 //initialize regestries for buzzer
@@ -94,6 +108,12 @@ static void initVolumeControl() {
     ADCSRA = (1 << ADEN | 1 << ADATE | 1 << ADSC |1 << ADPS2 | 1 << ADPS1 | 1 << ADPS0); // enable ADC, enable auto trigger, start initial conversion, and set prescaler to 128
 }
 
+static void initFilterSizeControl() {
+   PORTB |= (1 << PORTB0 | 1 << PORTB1); //enable pullup resistors on both buttons
+   PCICR |= (1 << PCIE0); // enable pin change interrupt for PORTB
+   PCMSK0 |= (1 << PCINT0 | 1 << PCINT1); // enable interrupt for PINB0 and PINB1
+}
+
 int main() {
     enum SonarState sonarState = READY_FOR_TRIGGER; // current state of sonar state machine
 
@@ -101,7 +121,6 @@ int main() {
     uint32_t timeSinceLastUsartPrint = 0; // time since last USART print
     uint32_t distance = 0; // distance based on sonarsensor input in mm
     uint32_t medianTimeDiff = 0; // median of last MAX_SAMPLES time differences in microseconds
-    uint8_t filterSize = MAX_SAMPLES;
     
     char message[255] = ""; //message buffer used to transmit distance over usart
 
@@ -112,6 +131,7 @@ int main() {
     timerTrackingInit();
     //initialize sensors and actuators
     initVolumeControl();
+    initFilterSizeControl();
     initSonarSensor();
     initBuzzer();
     //enable global interrupts
@@ -131,7 +151,7 @@ int main() {
         switch (sonarState) {
             case READY_FOR_TRIGGER:
                 //enable trigger pin
-                PORTD |= (1 << PORTD4);
+                PORTC |= (1 << PORTC1);
                 timeSinceTriggerStart = micros();
                 sonarState = SENDING_TRIGGER;
                 break;
@@ -139,7 +159,7 @@ int main() {
             case SENDING_TRIGGER:
                 //disable trigger pin after 10 microseconds
                 if (micros() - timeSinceTriggerStart > 10) {
-                    PORTD &= ~(1 << PORTD4);
+                    PORTC &= ~(1 << PORTC1);
                     sonarState = WAITING_FOR_ECHO;
                 }
                 break;
