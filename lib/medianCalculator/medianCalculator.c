@@ -29,7 +29,9 @@ void calculateMedian_uint32(const uint32_t *samples, uint8_t size, uint32_t *ret
     
     //create temporary copy of samples so the original order is not changed
     uint32_t temp_samples[size];
-    memcpy(temp_samples, samples, sizeof(temp_samples));
+    for (uint8_t i = 0; i < size; i++) {
+        temp_samples[i] = samples[i];
+    }
 
     //use qsort from stdlib to sort the samples
     qsort(temp_samples, size, sizeof(uint32_t), compare_uint32);
