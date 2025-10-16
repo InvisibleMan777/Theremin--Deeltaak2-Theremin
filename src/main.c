@@ -170,7 +170,7 @@ int main() {
 
         //mapping distance to frequency negatively linearly: frequenty = ((dmax - distance) / (dmax - dmin)) * (fmax - fmin) + fmin
         //casting to double to prevent integer division (which would result in 0 for distances < dmax)
-        uint16_t frequencyBuzzer = round(((MAX_DISTANCE_MM - distance) / (double) (MAX_DISTANCE_MM - MIN_DISTANCE_MM)) * (MAX_FREQ_HZ - MIN_FREQ_HZ) + MIN_FREQ_HZ);
+        double frequencyBuzzer = ((MAX_DISTANCE_MM - distance) / (double) (MAX_DISTANCE_MM - MIN_DISTANCE_MM)) * (MAX_FREQ_HZ - MIN_FREQ_HZ) + MIN_FREQ_HZ;
 
         //set frequency of buzzer by setting timer0 compare value, cast to uint8_t to make sure it fits in the register
         OCR0A = (uint8_t) round(31250 / frequencyBuzzer) - 1;
@@ -182,7 +182,7 @@ int main() {
         // print distance every x ms (debug)
         if (millis() - timeSinceLastUsartPrint > 100) {
             //load distance into message buffer, cast to unsigned long to prevent warning from cppcheck
-            sprintf(message, "distance: %lu | frequency: %u | adc: %u", (unsigned long) distance, frequencyBuzzer, ADCH);
+            sprintf(message, "distance: %lu | frequency: %u | adc: %u", (unsigned long) distance, (uint16_t) round(frequencyBuzzer), ADCH);
             //trasmit message buffer and reset timer
             USART_Transmit_Line(message);
             timeSinceLastUsartPrint = millis();
