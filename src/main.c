@@ -1,8 +1,8 @@
 //standard libraries
 #include <avr/io.h>
-#include <avr/interrupt.h>
 #include <stdio.h>
 #include <math.h> 
+#include <avr/interrupt.h>
 
 //internal libraries
 #include "usart.h"
@@ -10,15 +10,12 @@
 #include "medianCalculator.h"
 #include "queueType.h"
 
-//constants
-#define MAX_SAMPLES 15 // number of samples to take for median filtering
-#define MIN_SAMPLES 1 // minimum number of samples for median filtering
-#define MAX_DISTANCE_MM 650 // maximum distance measurable by the sensor in mm
-#define MIN_DISTANCE_MM 20 // minimum distance measurable by the sensor in mm
-#define MAX_FREQ_HZ 1400 // maximum frequency of the buzzer in Hz
-#define MIN_FREQ_HZ 230 // minimum frequency of the buzzer in Hz
+//local files
+#include "constants.h"
+#include "initIO.h"
+#include "main.h"
 
-//states for sonar state machine
+//states for sonar sensor state machine
 enum SonarState {
     READY_FOR_TRIGGER,
     SENDING_TRIGGER,
@@ -26,102 +23,21 @@ enum SonarState {
     ECHO_RECEIVED
 };
 
-//only used in interrupt routine
-volatile uint32_t echoTimeStart = 0; // time when echo is received
-volatile uint8_t sampleIndex = 0; // current index of oldest sample in samples array
-
 //global variables
-Queue_uint32 *timeDiffSamples; //last sample of time differences in microseconds
-char echoReceivedFlag = 0; // flag to indicate if echo has been received by the sonar sensor
+volatile uint32_t echoTimeStart = 0; //start time of echo signal from sonar sensor
+char echoReceivedFlag = 0; // flag to indicate if echo has been fully received by the sonar sensor
 uint32_t latestMeasurement = 0; //latest measurement from sonar sensor
-uint8_t filterSize = MAX_SAMPLES;
-
-//pin change interrupt service routine for echo pin of the sonar sensor
-ISR(PCINT1_vect) {
-    //interupt is triggered on both rising and falling edge of echo pin
-    switch (PINC & (1 << PINC2)) {
-        //rising edge
-        case (1 << PINC2):
-            //start timing
-            echoTimeStart = micros();
-            break;
-            
-        //falling edge
-        case 0:
-            //save time
-            latestMeasurement = micros() - echoTimeStart;
-            //set flag to indicate echo has been received
-            echoReceivedFlag = 1;
-            break;
-
-        default:
-            //should never happen
-            break;
-    }
-}
-
-ISR(PCINT0_vect) {
-    //button0 on falling edge
-    if (!(PINB & (1 << PINB0)) && filterSize < MAX_SAMPLES) {
-        filterSize += 2;
-    }
-    //button1 on falling edge
-    if (!(PINB & (1 << PINB1)) && filterSize > MIN_SAMPLES) {
-        //button on PINB1 was pressed, increase filter size
-        filterSize -= 2;
-    }
-}
-
-//timer0 compare interrupt service routine for buzzer
-ISR(TIMER0_COMPA_vect) {
-    //toggle PD3 (buzzer) by toggling its data direction
-    DDRD ^= (1 << DDD3);
-}
-
-//initialize regestries for sonar sensor
-static void initSonarSensor() {
-    DDRC |= (1 << DDC1); //initalize trigger pin (PC1) as output
-
-    //enable interrupt
-    PCICR |= (1 << PCIE1); // enable pin change interrupt for PORTC
-    PCMSK1 |= (1 << PCINT10); // enable interrupt for PC2
-}
-
-//initialize regestries for buzzer
-static void initBuzzer() {
-    //init timer0, used to create frequency for buzzer
-    TCCR0A = (1 << WGM01); // set CTC mode
-    TCCR0B = (1 << CS02); // set prescaler to 256
-    TIMSK0 = (1 << OCIE0A); // enable timer compare interrupt for match A
-    OCR0A = 77; // this register now controls the frequency of the buzzer, initialized at 400Hz (16MHz / (2 * 256 * 400Hz) - 1 = 77)
-
-    //init timer2, used for volume control and output of buzzer
-    TCCR2A = (1 << COM2B1 | 1 << WGM21 | 1 << WGM20); // set fast PWM mode, clear OC2B (connected to buzzer) on compare match, set at BOTTOM
-    TCCR2B = (1 << CS20); // set prescaler to 1 (no prescaling)
-    OCR2B = 25; // this register now controls the volume of the buzzer, initialized at ~10% duty cycle (25/255)
-}
-
-//initialize regestries for volume control (ADC)
-static void initVolumeControl() {
-    //init ADC, used for volume control
-    ADMUX = (1 << ADLAR | 1 << REFS0); // set reference voltage to AVcc and select ADC0 (connected to potmeter) as input
-    ADCSRA = (1 << ADEN | 1 << ADATE | 1 << ADSC |1 << ADPS2 | 1 << ADPS1 | 1 << ADPS0); // enable ADC, enable auto trigger, start initial conversion, and set prescaler to 128
-}
-
-static void initFilterSizeControl() {
-   PORTB |= (1 << PORTB0 | 1 << PORTB1); //enable pullup resistors on both buttons
-   PCICR |= (1 << PCIE0); // enable pin change interrupt for PORTB
-   PCMSK0 |= (1 << PCINT0 | 1 << PCINT1); // enable interrupt for PINB0 and PINB1
-}
+uint8_t filterSize = MAX_SAMPLES; //current filter size, can be changed with the buttons, every cycle the queue size is ajusted to this
+Queue_uint32 *measurementSamples; //queue containing the last <filterSize> amount of measurements from sonar sensor
 
 int main() {
     enum SonarState sonarState = READY_FOR_TRIGGER; // current state of sonar state machine
 
+    //variables for main loop
     uint32_t timeSinceTriggerStart = 0; // time since last trigger of sonar sensor
     uint32_t timeSinceLastUsartPrint = 0; // time since last USART print
     uint32_t distance = 0; // distance based on sonarsensor input in mm
     uint32_t medianTimeDiff = 0; // median of last MAX_SAMPLES time differences in microseconds
-    
     char message[255] = ""; //message buffer used to transmit distance over usart
 
     //initialize usart communication for debugging
@@ -129,7 +45,7 @@ int main() {
     USART_Transmit_Line("Hello, USART!");
     //initialize time tracking so we can use millis() and micros()
     timerTrackingInit();
-    //initialize sensors and actuators
+    //initialize I/O, functions found in initIO.c
     initVolumeControl();
     initFilterSizeControl();
     initSonarSensor();
@@ -137,12 +53,12 @@ int main() {
     //enable global interrupts
     sei(); 
 
-    //create queue to store time samples of the sonar sensor
-    timeDiffSamples = createQueue_uint32(filterSize);
+    //initialize queue to store measurement samples of the sonar sensor
+    measurementSamples = createQueue_uint32(filterSize);
 
     //initialize queue with zeros
     for (int i = 0; i < filterSize; i++) {
-        enqueue_uint32(timeDiffSamples, 0);
+        enqueue_uint32(measurementSamples, 0);
     }
 
     //main loop
@@ -176,12 +92,12 @@ int main() {
 
             case ECHO_RECEIVED:
                 //save time difference in samples queue
-                enqueue_uint32(timeDiffSamples, latestMeasurement);
+                enqueue_uint32(measurementSamples, latestMeasurement);
                 //remove oldest sample
-                dequeue_uint32(timeDiffSamples);
+                dequeue_uint32(measurementSamples);
 
                 //calculate median of the samples, store in medianTimeDiff
-                calculateMedian_uint32(timeDiffSamples->data, timeDiffSamples->size, &medianTimeDiff);
+                calculateMedian_uint32(measurementSamples->data, measurementSamples->size, &medianTimeDiff);
                 //calculate distance in mm: distance = (timeDiff * speed of sound) / 2
                 distance = round((medianTimeDiff * 0.343) / 2);
 
@@ -213,26 +129,26 @@ int main() {
         OCR2B = ADCH;
 
         //check if filter size has changed
-        int8_t samplesAmountInaccuracy = filterSize - timeDiffSamples->size;
+        int8_t samplesAmountInaccuracy = filterSize - measurementSamples->size;
 
         if (samplesAmountInaccuracy == 0) {
             //all good, do nothing
         } else if (samplesAmountInaccuracy > 0) {
             //fill queue with zeros to ajust to new filter size
             for (int i = 0; i < samplesAmountInaccuracy; i++) {
-                enqueue_uint32(timeDiffSamples, 0);
+                enqueue_uint32(measurementSamples, 0);
             }
         } else if (samplesAmountInaccuracy < 0) {
             //remove oldest samples to ajust to new filter size
             for (int i = 0; i < -samplesAmountInaccuracy; i++) {
-                dequeue_uint32(timeDiffSamples);
+                dequeue_uint32(measurementSamples);
             }
         }
 
         // print distance every x ms (debug)
         if (millis() - timeSinceLastUsartPrint > 100) {
             //load distance into message buffer, cast to unsigned long to prevent warning from cppcheck
-            sprintf(message, "distance: %lu | frequency: %u | adc: %u | filter size: %u", (unsigned long) distance, (uint16_t) round(frequencyBuzzer), ADCH, timeDiffSamples->size);
+            sprintf(message, "distance: %lu | frequency: %u | adc: %u | filter size: %u", (unsigned long) distance, (uint16_t) round(frequencyBuzzer), ADCH, measurementSamples->size);
             //trasmit message buffer and reset timer
             USART_Transmit_Line(message);
             timeSinceLastUsartPrint = millis();
