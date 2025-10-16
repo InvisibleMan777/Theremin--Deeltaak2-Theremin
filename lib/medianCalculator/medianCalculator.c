@@ -20,10 +20,11 @@ static int compare_uint32(const void *a, const void *b) {
 }
 
 //function to calculate median of given uint32_t array and size
-uint32_t calculateMedian_uint32(const uint32_t *samples, uint8_t size) {
+void calculateMedian_uint32(const uint32_t *samples, uint8_t size, uint32_t *returnPointer) {
     //Handle empty array case
     if (size == 0) {
-        return 0;
+        *returnPointer = 0;
+        return;
     }
     
     //create temporary copy of samples so the original order is not changed
@@ -37,9 +38,9 @@ uint32_t calculateMedian_uint32(const uint32_t *samples, uint8_t size) {
     //check if size is even or odd
     if (size % 2 == 0) {
         // average of two middle values
-        return (temp_samples[size / 2 - 1] + temp_samples[size / 2]) / 2;
+        *returnPointer = (temp_samples[size / 2 - 1] + temp_samples[size / 2]) / 2;
     } else {
         // exact middle value
-        return temp_samples[size / 2];
+        *returnPointer = temp_samples[size / 2];
     }
 }

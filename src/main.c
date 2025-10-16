@@ -147,8 +147,8 @@ int main() {
                 break;
 
             case ECHO_RECEIVED:
-                //calculate median of last 10 samples
-                medianTimeDiff = calculateMedian_uint32(timeDiffSamples, MAX_SAMPLES);
+                //calculate median of last 10 samples, store in medianTimeDiff
+                calculateMedian_uint32(timeDiffSamples, MAX_SAMPLES, &medianTimeDiff);
                 //calculate distance in mm: distance = (timeDiff * speed of sound) / 2
                 distance = round((medianTimeDiff * 0.343) / 2);
 
