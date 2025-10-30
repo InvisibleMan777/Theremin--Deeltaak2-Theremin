@@ -9,6 +9,7 @@
 #include "timetracking.h"
 #include "medianCalculator.h"
 #include "queueType.h"
+#include "distanceToFrequency.h"
 
 //local files
 #include "constants.h"
@@ -117,9 +118,8 @@ int main() {
                 break;
         }
 
-        //mapping distance to frequency negatively linearly: frequenty = ((dmax - distance) / (dmax - dmin)) * (fmax - fmin) + fmin
-        //casting to double to prevent integer division (which would result in 0 for distances < dmax)
-        double frequencyBuzzer = ((MAX_DISTANCE_MM - distance) / (double) (MAX_DISTANCE_MM - MIN_DISTANCE_MM)) * (MAX_FREQ_HZ - MIN_FREQ_HZ) + MIN_FREQ_HZ;
+        //convert distance to frequency for buzzer
+        double frequencyBuzzer = DistanceToFrequency(distance, MIN_DISTANCE_MM, MAX_DISTANCE_MM, MIN_FREQ_HZ, MAX_FREQ_HZ);
 
         //set frequency of buzzer by setting timer0 compare value
         OCR0A = round(31250 / frequencyBuzzer) - 1;
