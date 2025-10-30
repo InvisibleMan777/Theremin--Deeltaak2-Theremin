@@ -5,7 +5,6 @@
 #include <avr/interrupt.h>
 
 //internal libraries
-#include "usart.h"
 #include "timetracking.h"
 #include "medianCalculator.h"
 #include "queueType.h"
@@ -28,12 +27,7 @@ int main() {
     enum SonarState sonarState = READY_FOR_TRIGGER; // current state of sonar state machine
     Queue_uint32 *measurementSamples; //queue containing the last <filterSize> amount of measurements from sonar sensor
     uint32_t distance = 0; // distance based on sonarsensor input in mm
-    uint32_t timeSinceLastUsartPrint = 0; // time since last USART print
-    char message[255] = ""; //message buffer used to transmit distance over usart
 
-    //initialize usart communication for debugging
-    USART_Init();
-    USART_Transmit_Line("Hello, USART!");
     //initialize time tracking so we can use millis() and micros()
     timerTrackingInit();
     //initialize I/O, functions found in initIO.c
@@ -87,16 +81,8 @@ int main() {
                 }
                 break;
         }
-
-        // print distance every x ms (debug)
-        if (millis() - timeSinceLastUsartPrint > 100) {
-            //load distance into message buffer, cast to unsigned long to prevent warning from cppcheck
-            sprintf(message, "distance: %lu | frequency: %u | adc: %u | filter size: %u", (unsigned long) distance, (uint16_t) round(frequencyBuzzer), ADCH, measurementSamples->size);
-            //trasmit message buffer and reset timer
-            USART_Transmit_Line(message);
-            timeSinceLastUsartPrint = millis();
-        }
     }
 
+    //should never reach this
     return 0;
 }
