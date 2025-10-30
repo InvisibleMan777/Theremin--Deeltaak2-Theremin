@@ -4,11 +4,9 @@
 #include <unity.h>
 
 void setUp(void) {
-    // set stuff up here
 }
 
 void tearDown(void) {
-    // clean stuff up here
 }
 
 static void test_DistanceToFrequency(void) {
