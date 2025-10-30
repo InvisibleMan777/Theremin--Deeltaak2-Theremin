@@ -5,6 +5,8 @@
 #include "timetracking.h"
 #include "constants.h"
 
+volatile uint32_t echoTimeStart = 0; //start time of echo signal from sonar sensor
+
 //pin change interrupt service routine for echo pin of the sonar sensor
 ISR(PCINT1_vect) {
     //interupt is triggered on both rising and falling edge of echo pin
